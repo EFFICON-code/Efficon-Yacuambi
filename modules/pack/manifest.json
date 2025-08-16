@@ -1,0 +1,11 @@
+{
+  "entity": "GAD YACUAMBI",
+  "version": "2.3.7",
+  "generated_at": "2025-08-15T00:00:00Z",
+  "files": [
+    "requerimiento.bas",
+    "solicitudstockbodega.bas",
+    "solicitudcertificacioncatalogo.bas"
+  ],
+  "notes": "Paquete base con 3 módulos iniciales."
+}

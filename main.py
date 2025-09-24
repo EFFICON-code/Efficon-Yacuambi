@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from flask import Flask, request, jsonify, send_from_directory, abort
+from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 
 # -------------------- App base --------------------
@@ -11,48 +11,39 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # -------------------- Config ----------------------
 ENTITY_NAME = os.environ.get("EFFICON_ENTITY_NAME", "ENTIDAD-NO-SET")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-MODEL_ID = os.environ.get("EFFICON_MODEL", "gpt-4o")  # <-- puedes cambiarlo en Railway sin tocar código
+MODEL_ID = os.environ.get("EFFICON_MODEL", "gpt-4o")
 
-# Rutas y archivos de módulos
-MODULE_DIR = os.path.join(os.getcwd(), "modules", "pack")
-MANIFEST_PATH = os.path.join(MODULE_DIR, "manifest.json")
+# Obtener la lista de tokens válidos desde el entorno
+# Si la variable no existe, se usa una cadena vacía
+# Se divide la cadena por comas para crear una lista
+# El .strip() limpia los espacios en blanco de cada token
+valid_tokens_str = os.environ.get("EFFICON_TOKENS", "")
+VALID_TOKENS = [token.strip() for token in valid_tokens_str.split(',') if token.strip()]
 
 # -------------------- Health ----------------------
 @app.get("/healthz")
 def healthz():
-    has_manifest = os.path.isfile(MANIFEST_PATH)
-    return jsonify(status="ok", entity=ENTITY_NAME, manifest=has_manifest), 200
+    """
+    Endpoint para verificar el estado de la aplicación.
+    """
+    return jsonify(status="ok", entity=ENTITY_NAME), 200
 
-# -------------------- Módulos ---------------------
-@app.get("/modules/manifest")
-def get_manifest():
-    if not os.path.isfile(MANIFEST_PATH):
-        return jsonify(error="manifest not found"), 404
-    with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-        mf = json.load(f)
-    # fuerza el nombre de entidad del entorno
-    mf["entity"] = ENTITY_NAME
-    return jsonify(mf), 200
-
-@app.get("/modules/download/<path:fname>")
-def download_bas(fname):
-    if not fname.lower().endswith(".bas"):
-        abort(400)
-    fullpath = os.path.join(MODULE_DIR, fname)
-    if not os.path.isfile(fullpath):
-        abort(404)
-    return send_from_directory(MODULE_DIR, fname, as_attachment=True)
-
-# -------------------- ChatGPT (con token opcional) ---------------------
+# -------------------- ChatGPT (con múltiples tokens) ---------------------
 @app.post("/chatgpt")
 def chatgpt():
+    """
+    Endpoint principal para procesar prompts con la API de OpenAI.
+    Requiere autenticación con un token.
+    """
     data = request.get_json(silent=True) or {}
     prompt = data.get("prompt", "")
-
-    # Token opcional: si EFFICON_TOKEN existe, lo exigimos
-    token_expected = os.environ.get("EFFICON_TOKEN", "").strip()
+    
+    # 1. Obtener el token del request
     token_recv = (request.headers.get("X-EFFICON-TOKEN", "") or data.get("token", "")).strip()
-    if token_expected and token_recv != token_expected:
+
+    # 2. Validar el token
+    # Si la lista de tokens válidos no está vacía Y el token recibido NO está en la lista
+    if VALID_TOKENS and token_recv not in VALID_TOKENS:
         return jsonify(error="Auth failed: invalid token"), 403
 
     if not prompt:
@@ -83,8 +74,8 @@ def chatgpt():
         return jsonify(error="OpenAI request failed",
                        details=str(e),
                        body=getattr(e.response, "text", "")), status
+                       
 # -------------------- Run local -------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
     app.run(host="0.0.0.0", port=port)
-    

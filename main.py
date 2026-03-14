@@ -1,5 +1,6 @@
 import os
 import json
+import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from google import genai
@@ -12,7 +13,9 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # -------------------- Config ----------------------
 ENTITY_NAME = os.environ.get("EFFICON_ENTITY_NAME", "ENTIDAD-NO-SET")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-MODEL_ID = os.environ.get("EFFICON_MODEL", "gemini-1.5-pro")
+
+# Actualizado por defecto a gemini-2.5-pro para máxima compatibilidad
+MODEL_ID = os.environ.get("EFFICON_MODEL", "gemini-2.5-pro")
 
 valid_tokens_str = os.environ.get("EFFICON_TOKENS", "")
 VALID_TOKENS = [token.strip() for token in valid_tokens_str.split(',') if token.strip()]
@@ -63,13 +66,11 @@ def procesar_prompt():
         # Devolver el formato exacto que Excel espera
         return jsonify(ok=True, entity=ENTITY_NAME, answer=text), 200
 
-except Exception as e:
-        # --- NUEVAS LÍNEAS PARA IMPRIMIR EL ERROR EN RAILWAY ---
+    except Exception as e:
+        # Imprimir el error exacto en los logs de Railway
         print("========== ERROR DE GEMINI ==========", flush=True)
-        import traceback
         traceback.print_exc()
         print("=====================================", flush=True)
-        # -------------------------------------------------------
         return jsonify(error="Gemini request failed", details=str(e)), 502
                        
 # -------------------- Run local -------------------

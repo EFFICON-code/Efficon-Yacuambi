@@ -63,7 +63,13 @@ def procesar_prompt():
         # Devolver el formato exacto que Excel espera
         return jsonify(ok=True, entity=ENTITY_NAME, answer=text), 200
 
-    except Exception as e:
+except Exception as e:
+        # --- NUEVAS LÍNEAS PARA IMPRIMIR EL ERROR EN RAILWAY ---
+        print("========== ERROR DE GEMINI ==========", flush=True)
+        import traceback
+        traceback.print_exc()
+        print("=====================================", flush=True)
+        # -------------------------------------------------------
         return jsonify(error="Gemini request failed", details=str(e)), 502
                        
 # -------------------- Run local -------------------

@@ -1,8 +1,8 @@
 import os
 import json
-import requests
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+import google.generativeai as genai
 
 # -------------------- App base --------------------
 app = Flask(__name__)
@@ -10,15 +10,18 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # -------------------- Config ----------------------
 ENTITY_NAME = os.environ.get("EFFICON_ENTITY_NAME", "ENTIDAD-NO-SET")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-MODEL_ID = os.environ.get("EFFICON_MODEL", "gpt-4o")
+# Cambiamos OPENAI_API_KEY por GEMINI_API_KEY
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Cambiamos el modelo por defecto al más potente para textos largos
+MODEL_ID = os.environ.get("EFFICON_MODEL", "gemini-1.5-pro")
 
 # Obtener la lista de tokens válidos desde el entorno
-# Si la variable no existe, se usa una cadena vacía
-# Se divide la cadena por comas para crear una lista
-# El .strip() limpia los espacios en blanco de cada token
 valid_tokens_str = os.environ.get("EFFICON_TOKENS", "")
 VALID_TOKENS = [token.strip() for token in valid_tokens_str.split(',') if token.strip()]
+
+# Configurar el cliente de Google Gemini globalmente
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # -------------------- Health ----------------------
 @app.get("/healthz")
@@ -28,11 +31,12 @@ def healthz():
     """
     return jsonify(status="ok", entity=ENTITY_NAME), 200
 
-# -------------------- ChatGPT (con múltiples tokens) ---------------------
+# -------------------- Endpoint Principal (Gemini) ---------------------
+# Mantenemos la ruta /chatgpt para NO romper tu código VBA en Excel
 @app.post("/chatgpt")
-def chatgpt():
+def procesar_prompt():
     """
-    Endpoint principal para procesar prompts con la API de OpenAI.
+    Endpoint principal para procesar prompts con Gemini 1.5 Pro.
     Requiere autenticación con un token.
     """
     data = request.get_json(silent=True) or {}
@@ -42,38 +46,52 @@ def chatgpt():
     token_recv = (request.headers.get("X-EFFICON-TOKEN", "") or data.get("token", "")).strip()
 
     # 2. Validar el token
-    # Si la lista de tokens válidos no está vacía Y el token recibido NO está en la lista
     if VALID_TOKENS and token_recv not in VALID_TOKENS:
         return jsonify(error="Auth failed: invalid token"), 403
 
     if not prompt:
         return jsonify(error="prompt requerido"), 400
 
-    if not OPENAI_API_KEY:
-        return jsonify(error="OPENAI_API_KEY not configured"), 500
-
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": MODEL_ID,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2
-    }
+    if not GEMINI_API_KEY:
+        return jsonify(error="GEMINI_API_KEY not configured in environment"), 500
 
     try:
-        r = requests.post("https://api.openai.com/v1/chat/completions",
-                          headers=headers, json=payload, timeout=120)
-        r.raise_for_status()
-        out = r.json()
-        text = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        return jsonify(ok=True, entity=ENTITY_NAME, answer=text), 200
-    except requests.exceptions.RequestException as e:
-        status = getattr(e.response, "status_code", 502)
-        return jsonify(error="OpenAI request failed",
-                       details=str(e),
-                       body=getattr(e.response, "text", "")), status
+        # Inicializar el modelo
+        model = genai.GenerativeModel(MODEL_ID)
+        
+        # Configuramos la temperatura baja (0.2) para respuestas formales y precisas
+        config = genai.types.GenerationConfig(temperature=0.2)
+        
+        # Generar la respuesta
+        response = model.generate_content(prompt, generation_config=config)
+        
+        # Extraer el texto limpio
+        text = response.text.strip()
+        
+        # IMPORTANTE: Devolvemos el mismo JSON que esperaba tu Excel
+        # Si tu Excel espera "choices" y "message" (formato OpenAI viejo), lo emulamos.
+        # En tu código de Excel original pedías: jsonResp("choices")(1)("message")("content")
+        # Aquí te devuelvo exactamente ese formato para que tu macro funcione al instante.
+        emulated_response = {
+            "choices": [
+                {
+                    "message": {
+                        "content": text
+                    }
+                }
+            ]
+        }
+        
+        # Ojo: Devuelvo tu formato base ("ok", "entity", "answer") y también "choices" para Excel
+        return jsonify(
+            ok=True, 
+            entity=ENTITY_NAME, 
+            answer=text,
+            choices=emulated_response["choices"]
+        ), 200
+
+    except Exception as e:
+        return jsonify(error="Gemini request failed", details=str(e)), 502
                        
 # -------------------- Run local -------------------
 if __name__ == "__main__":

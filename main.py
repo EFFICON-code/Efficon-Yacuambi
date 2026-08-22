@@ -47,6 +47,15 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # -------------------- Config ----------------------
 ENTITY_NAME = os.environ.get("EFFICON_ENTITY_NAME", "ENTIDAD-NO-SET")
 EXPIRED_ENTITIES = parse_expired_entities(os.environ.get("EFFICON_EXPIRED_ENTITIES", ""))
+
+# [DIAGNOSTIC] Logs temporales para depurar EFFICON_EXPIRED_ENTITIES
+print(
+    "[STARTUP] EFFICON_EXPIRED_ENTITIES raw value:",
+    os.environ.get("EFFICON_EXPIRED_ENTITIES", "NO_SET"),
+    flush=True,
+)
+print("[STARTUP] EXPIRED_ENTITIES parsed list:", EXPIRED_ENTITIES, flush=True)
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 # Actualizado por defecto a gemini-2.5-pro para máxima compatibilidad
@@ -82,6 +91,28 @@ def healthz():
 def procesar_prompt():
     data = request.get_json(silent=True) or {}
     request_entity = data.get("entity", "")
+
+    # [DIAGNOSTIC] Logs temporales para depurar EFFICON_EXPIRED_ENTITIES
+    print(
+        "[REQUEST] Received entity:",
+        request_entity if request_entity else "empty_string",
+        flush=True,
+    )
+    print("[REQUEST] Normalized entity:", normalize_entity_name(request_entity), flush=True)
+    print(
+        "[REQUEST] Normalized EXPIRED_ENTITIES set:",
+        {
+            normalize_entity_name(entity)
+            for entity in EXPIRED_ENTITIES
+            if normalize_entity_name(entity)
+        },
+        flush=True,
+    )
+    print(
+        "[REQUEST] is_contract_expired() result:",
+        is_contract_expired(request_entity),
+        flush=True,
+    )
 
     # Se valida antes de autenticar o invocar cualquier servicio con costo.
     # En este backend compartido, la entidad se obtiene de cada solicitud.

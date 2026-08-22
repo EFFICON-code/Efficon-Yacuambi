@@ -1,10 +1,44 @@
 import os
 import json
 import traceback
+import unicodedata
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from google import genai
 from google.genai import types
+
+
+CONTRACT_EXPIRED_MESSAGE = (
+    "Se ha culminado el plazo del contrato. Contacte con PROESTRATEGIA para "
+    "renovar el contrato.\n\n"
+    "Ing. Carlos Antonio Salinas Coronel\n"
+    "Celular: 0967314512\n\n"
+    "Gracias por utilizar nuestros servicios."
+)
+
+
+def normalize_entity_name(value):
+    """Normaliza una entidad para comparaciones tolerantes a formato."""
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return " ".join(text.casefold().split())
+
+
+def parse_expired_entities(raw_value):
+    """Acepta una lista JSON o una lista de nombres separada por comas."""
+    if not raw_value or not str(raw_value).strip():
+        return []
+
+    raw_text = str(raw_value).strip()
+    try:
+        parsed = json.loads(raw_text)
+    except (json.JSONDecodeError, TypeError):
+        parsed = raw_text.split(",")
+
+    if not isinstance(parsed, list):
+        parsed = raw_text.split(",")
+
+    return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
 
 # -------------------- App base --------------------
 app = Flask(__name__)
@@ -12,6 +46,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # -------------------- Config ----------------------
 ENTITY_NAME = os.environ.get("EFFICON_ENTITY_NAME", "ENTIDAD-NO-SET")
+EXPIRED_ENTITIES = parse_expired_entities(os.environ.get("EFFICON_EXPIRED_ENTITIES", ""))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 # Actualizado por defecto a gemini-2.5-pro para máxima compatibilidad
@@ -25,6 +60,17 @@ client = None
 if GEMINI_API_KEY:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
+
+def is_contract_expired(entity_name):
+    """Valida la entidad recibida en una solicitud contra la lista configurada."""
+    normalized_entity = normalize_entity_name(entity_name)
+    normalized_expired = {
+        normalize_entity_name(entity)
+        for entity in EXPIRED_ENTITIES
+        if normalize_entity_name(entity)
+    }
+    return bool(normalized_entity and normalized_entity in normalized_expired)
+
 # -------------------- Health ----------------------
 @app.get("/healthz")
 def healthz():
@@ -35,6 +81,18 @@ def healthz():
 @app.post("/chatgpt")
 def procesar_prompt():
     data = request.get_json(silent=True) or {}
+    request_entity = data.get("entity", "")
+
+    # Se valida antes de autenticar o invocar cualquier servicio con costo.
+    # En este backend compartido, la entidad se obtiene de cada solicitud.
+    if is_contract_expired(request_entity):
+        return jsonify(
+            error="contract_expired",
+            contract_expired=True,
+            entity=request_entity,
+            message=CONTRACT_EXPIRED_MESSAGE,
+        ), 403
+
     prompt = data.get("prompt", "")
     
     # 1. Obtener y validar el token

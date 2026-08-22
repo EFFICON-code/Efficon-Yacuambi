@@ -90,6 +90,42 @@ def healthz():
 @app.post("/chatgpt")
 def procesar_prompt():
     data = request.get_json(silent=True) or {}
+
+    # [REQUEST-FULL] Logs de diagnóstico para identificar qué datos/contexto
+    # envía VBA que permitan mapear la solicitud a una entidad, dado que VBA
+    # no envía el campo "entity" en el JSON.
+    try:
+        raw_body = request.get_data(as_text=True)
+    except Exception as exc:
+        raw_body = f"<error reading raw body: {exc}>"
+    print("[REQUEST-FULL] Raw JSON body:", raw_body, flush=True)
+    print("[REQUEST-FULL] Parsed JSON data:", data, flush=True)
+    print(
+        "[REQUEST-FULL] Headers received:",
+        dict(request.headers),
+        flush=True,
+    )
+    print(
+        "[REQUEST-FULL] Query parameters:",
+        request.args.to_dict(flat=False),
+        flush=True,
+    )
+    print(
+        "[REQUEST-FULL] Full request dump:",
+        {
+            "method": request.method,
+            "path": request.path,
+            "full_path": request.full_path,
+            "url": request.url,
+            "remote_addr": request.remote_addr,
+            "content_type": request.content_type,
+            "content_length": request.content_length,
+            "form": request.form.to_dict(flat=False),
+            "cookies": request.cookies,
+        },
+        flush=True,
+    )
+
     request_entity = data.get("entity", "")
 
     # [DIAGNOSTIC] Logs temporales para depurar EFFICON_EXPIRED_ENTITIES

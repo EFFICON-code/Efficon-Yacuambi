@@ -1,6 +1,6 @@
 # EFFICON Yacuambi
 
-Servicio Flask que expone el endpoint `/chatgpt` y utiliza Gemini para generar respuestas.
+Servicio Flask que expone el endpoint `/chatgpt`, utiliza OpenAI como proveedor principal y conserva Gemini como fallback automático.
 
 ## Configuración
 
@@ -9,10 +9,18 @@ Configure estas variables de entorno en Railway:
 ```ini
 GEMINI_API_KEY=clave-de-gemini
 EFFICON_MODEL=gemini-2.5-pro
+LLM_PRIMARY_PROVIDER=openai
+OPENAI_API_KEY=clave-de-openai
+OPENAI_MODEL=gpt-5.6-luna
+LLM_FALLBACK_PROVIDER=gemini
 EFFICON_ENTITY_NAME=Cuerpo de Bomberos de Loja
 EFFICON_EXPIRED_ENTITIES=Cuerpo de Bomberos de Loja
 EFFICON_TOKENS=token-opcional
 ```
+
+Si `OPENAI_API_KEY` está vacía o todavía no existe, la aplicación continúa utilizando Gemini sin interrumpir el servicio. Cuando OpenAI está configurado, Gemini se activa únicamente ante cuota o rate limit (`429`), timeout, error de conexión o errores `500`, `502`, `503` y `504` de OpenAI. Errores de autenticación, parámetros inválidos, parsing o programación no activan fallback.
+
+Se conserva `EFFICON_MODEL` como nombre existente para configurar el modelo Gemini. El valor predeterminado continúa siendo `gemini-2.5-pro`.
 
 `EFFICON_ENTITY_NAME` se conserva para las respuestas y el diagnóstico existentes, pero no participa en el bloqueo por contrato. El control usa el campo `entity` de cada solicitud a `/chatgpt`, porque varias entidades comparten el mismo backend.
 

@@ -18,8 +18,12 @@ def app_client(monkeypatch):
     monkeypatch.setattr(main, "ENTITY_NAME", "Cuerpo de Bomberos de Loja")
     monkeypatch.setattr(main, "EXPIRED_ENTITIES", [])
     monkeypatch.setattr(main, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(main, "OPENAI_API_KEY", "")
     monkeypatch.setattr(main, "VALID_TOKENS", [])
     monkeypatch.setattr(main, "client", fake_client)
+    monkeypatch.setattr(main, "openai_client", None)
+    monkeypatch.setattr(main, "LLM_PRIMARY_PROVIDER", "openai")
+    monkeypatch.setattr(main, "LLM_FALLBACK_PROVIDER", "gemini")
     main.app.config.update(TESTING=True)
 
     with main.app.test_client() as test_client:
